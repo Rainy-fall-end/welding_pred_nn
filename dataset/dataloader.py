@@ -7,7 +7,6 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from utils.tensor_convert import flatten_middle_dimensions
 class WeldTensorFolderDataset(Dataset):
     def __init__(self, data_path, npz_name="weld_data.npz", device=None):
         """
@@ -57,5 +56,4 @@ class WeldTensorFolderDataset(Dataset):
 
         out_tensor = np.stack(tensors, axis=0)  # (T,2,10,71,49)
         out_tensor = torch.from_numpy(out_tensor).float().to(self.device)
-        out_tensor = flatten_middle_dimensions(out_tensor)
         return out_tensor

@@ -6,7 +6,7 @@ def flatten_middle_dimensions(tensor):
     :return: torch.Tensor，shape = (B, T*2*10, 71, 49)
     """
     B, T, I, C, H, W = tensor.shape
-    return tensor.view(B, T * I * C, H, W)
+    return tensor.view(B, T , I * C, H, W)
 
 def unflatten_middle_dimensions(tensor, T=44):
     """
@@ -16,6 +16,5 @@ def unflatten_middle_dimensions(tensor, T=44):
     :param T: 原始的时间步数
     :return: 还原后的张量，shape = (B, T, 2, 10, H, W)
     """
-    B, N, H, W = tensor.shape
-    assert N % (T * 2 * 10) == 0 or N == T * 2 * 10, f"维度不一致，无法还原，N={N}, T={T}"
+    B, T, N, H, W = tensor.shape
     return tensor.view(B, T, 2, 10, H, W)
