@@ -57,3 +57,6 @@ class WeldTensorFolderDataset(Dataset):
         out_tensor = np.stack(tensors, axis=0)  # (T,2,10,71,49)
         out_tensor = torch.from_numpy(out_tensor).float().to(self.device)
         return out_tensor
+
+def build_dataset(args):
+    pass
