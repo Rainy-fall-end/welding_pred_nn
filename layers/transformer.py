@@ -8,7 +8,6 @@ Autoregressive Imputer (AR-Transformer) for irregular time-series
 3. GPT-style stack     – Vaswani et al., 2017, causal mask only
 4. Scheduled sampling  – Bengio et al., 2015  (optional)
 
-Author  : your-name
 Created : 2025-07-02
 """
 

@@ -3,31 +3,21 @@ import torch.nn as nn
 import wandb
 from tqdm import tqdm
 from typing import List,Tuple
+from dataset.dataloader import build_dataset
+from model.timeTransformer import E2Epredictor
 class Trainer:
-    """Trainer class for the transformer model.
-
-    Args:
-        model: The model to train.
-        dh: The data handler object.
-        batch_size: The batch size.
-        lr: The learning rate.
-        betas: The betas for the Adam optimiser.
-        eps: The epsilon for the Adam optimiser.
-        epochs: The number of epochs to train for.
-    """
-
     def __init__(
         self,
-        epochs: int = 10,
+        args
     ):
-        self.criterion = nn.MSELoss()
-        self.dataset = None
-        self.train_data = None
-        self.test_data = None
-        self.n_epochs = epochs
-        cuda_dev = "0"
-        use_cuda = torch.cuda.is_available()
-        self.device = torch.device("cuda:" + cuda_dev if use_cuda else "cpu")
+        if args.criterion == "mse":
+            self.criterion = nn.MSELoss()
+        else:
+            raise ValueError(f"no criterion{args.criterion}")
+        self.dataset = build_dataset(args)
+        self.model = E2Epredictor()
+        self.optimiser = torch.optim.AdamW(params=self.model.parameters(),lr=args.lr,weight_decay=args.weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimiser, T_max=50)
 
     def fit(self, dataloader: torch.utils.data.DataLoader, model: nn.Module, optimiser: torch.optim.Optimizer,scheduler,test_data):
         losses = []
@@ -41,13 +31,13 @@ class Trainer:
             wandb.log({"acc": accuracy_})
             wandb.log({"losses": loss_avg})
 
-    def train_one_epoch(self, dataloader, epoch_no, losses, optimiser, model, scheduler,disable_tqdm=False):
+    def train_one_epoch(self, epoch_no, losses, disable_tqdm=False):
         epoch_loss = 0
         i = 0
-        with tqdm(dataloader, unit="batch", disable=disable_tqdm) as tepoch:
-            for idx, data in enumerate(tepoch):
+        with tqdm(self.dataset, unit="batch", disable=disable_tqdm) as tepoch:
+            for idx, datas in enumerate(tepoch):
                 i += 1
-                loss, losses = self._train_one_loop(data=data, losses=losses, model=model, optimiser=optimiser,scheduler=scheduler)
+                loss, losses = self._train_one_loop(datas=datas, losses=losses)
                 epoch_loss += loss.detach()
                 tepoch.set_description(f"Epoch {epoch_no}")
                 tepoch.set_postfix(loss=epoch_loss.item() / i)
@@ -55,19 +45,16 @@ class Trainer:
 
 
     def _train_one_loop(
-        self, data: torch.utils.data.DataLoader, losses: List[float], model: nn.Module, optimiser: torch.optim.Optimizer,scheduler
-    ) -> Tuple[float, List[float]]:
+        self, datas: torch.utils.data.DataLoader, losses: List[float]) -> Tuple[float, List[float]]:
 
-        optimiser.zero_grad()
-        data[0] = data[0].double()
-        padding_mask = torch.ones((data[0].shape[0], data[0].shape[1])) > 0
-        output = model(data[0].to(self.device), padding_mask.to(self.device))
+        self.optimiser.zero_grad()
+        output = self.model(datas)
         # data[1] from [B,N] to [B]
-        target = torch.argmax(data[1], dim=1).to(self.device)
+        target = torch.argmax(datas[1], dim=1).to(self.device)
         loss = self.criterion(output, target)
         loss.backward()
-        optimiser.step()
-        scheduler.step()
+        self.optimiser.step()
+        self.scheduler.step()
         losses.append(loss.detach())
         return loss.detach(), losses
 

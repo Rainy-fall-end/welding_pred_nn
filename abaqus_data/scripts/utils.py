@@ -9,7 +9,7 @@ import os
 
 def create_folder(save_dir_base="data"):
     now = datetime.now()
-    time_folder = now.strftime('%H%M')  # 如 "1430"
+    time_folder = now.strftime('%Y%m%d_%H%M')  # 如 "20250703_1430"
     save_dir = os.path.join(save_dir_base, time_folder)
     os.makedirs(save_dir, exist_ok=True)
     return save_dir
