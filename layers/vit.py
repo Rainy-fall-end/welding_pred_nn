@@ -144,7 +144,7 @@ class ViTAutoencoder(nn.Module):
 # -----------------------------------------------------------------------------
 class SequenceViTAutoencoder(nn.Module):
     def __init__(self, img_size: Tuple[int, int] = (224, 224), patch_size: Tuple[int, int] = (16, 16), in_chans: int = 3,
-                 embed_dim: int = 768, enc_depth: int = 8, dec_depth: int = 4, enc_heads: int = 8, dec_heads: int = 8,
+                 embed_dim: int = 256, enc_depth: int = 8, dec_depth: int = 4, enc_heads: int = 8, dec_heads: int = 8,
                  mlp_ratio: float = 4.):
         super().__init__()
         self.frame_ae = ViTAutoencoder(img_size, patch_size, in_chans, embed_dim,

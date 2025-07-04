@@ -13,13 +13,10 @@ def get_args():
 
     # ====== 模型参数 ======
     parser.add_argument('--model', type=str, default='regression',choices=['regression'])
-    parser.add_argument('--input_dim', type=int, default=128,
-                        help='Input feature dimension')
-    parser.add_argument('--hidden_dim', type=int, default=256,
-                        help='Hidden layer dimension')
-    parser.add_argument('--output_dim', type=int, default=10,
-                        help='Number of output classes')
-
+    parser.add_argument('--H', type=int, default=7)
+    parser.add_argument('--W', type=int, default=7)
+    parser.add_argument('--C', type=int, default=20)
+    parser.add_argument('--embed_dim', type=int, default=20)
     # ====== 训练参数 ======
     parser.add_argument('--epochs', type=int, default=50,
                         help='Number of training epochs')
@@ -29,8 +26,7 @@ def get_args():
                         help='Initial learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-5,
                         help='Weight decay (L2 regularization)')
-    parser.add_argument('--criterion', type=str, default="mse",)
-
+    parser.add_argument('--weight_last', type=float, default=2)
     # ====== 优化器与调度器 ======
     parser.add_argument('--optimizer', type=str, default='adam',
                         choices=['adam', 'sgd'],
@@ -48,7 +44,10 @@ def get_args():
                         help='Random seed for reproducibility')
     parser.add_argument('--num_workers', type=int, default=4,
                         help='Number of data loader worker threads')
-
+    parser.add_argument('--enable_wb', type=False, default=False)
+    parser.add_argument("--project_name", type=str, default="Welding_pred")
+    parser.add_argument("--run_name", type=str, default="test")
+    
     # ====== 模型恢复与测试 ======
     parser.add_argument('--resume', type=str, default='',
                         help='Path to resume checkpoint')
