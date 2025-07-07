@@ -8,6 +8,8 @@ from model.timeTransformer import E2Epredictor
 import random
 import torch
 import torch.nn.functional as F
+from utils.tensor_convert import split_train_val,flatten_middle_dimensions,unflatten_middle_dimensions
+from api.loss import TemporalWeightedLoss
 class Trainer:
     def __init__(
         self,
@@ -15,10 +17,11 @@ class Trainer:
     ):
         self.args = args
         self.dataset = build_dataset(args)
-        self.model = E2Epredictor(args,self.dataset.shape)
+        self.model = E2Epredictor(args,self.dataset.dataset.shape).to(device=args.device)
         self.optimiser = torch.optim.AdamW(params=self.model.parameters(),lr=args.lr,weight_decay=args.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimiser, T_max=50)
-
+        self.metric = TemporalWeightedLoss(self.dataset.dataset.shape[0]-1).to(self.args.device)
+        
     def fit(self, dataloader: torch.utils.data.DataLoader, model: nn.Module, optimiser: torch.optim.Optimizer,scheduler,test_data):
         losses = []
         model = model.to(self.device)
@@ -37,7 +40,7 @@ class Trainer:
         with tqdm(self.dataset, unit="batch", disable=disable_tqdm) as tepoch:
             for idx, datas in enumerate(tepoch):
                 i += 1
-                loss, losses = self._train_one_loop(label=datas, losses=losses)
+                loss, losses = self._train_one_loop(datas=datas, losses=losses)
                 epoch_loss += loss.detach()
                 tepoch.set_description(f"Epoch {epoch_no}")
                 tepoch.set_postfix(loss=epoch_loss.item() / i)
@@ -53,17 +56,14 @@ class Trainer:
 
 
     def _train_one_loop(
-        self, label, losses: List[float]) -> Tuple[float, List[float]]:
+        self, datas, losses: List[float]) -> Tuple[float, List[float]]:
 
         self.optimiser.zero_grad()
-        mask = self._cal_mask(label[0])
-        pre = self.model(label,mask)
-        loss = self._cal_loss(
-            label=label[0],
-            output=pre,
-            mask=mask,
-            weight_last=self.args.weight_last
-        )
+        (out_tensor, start_times_tensor, time_periods_tensor, para_tensor) = datas
+        out_tensor = flatten_middle_dimensions(out_tensor)
+        x, label = split_train_val(out_tensor)
+        pre = self.model((x, start_times_tensor, time_periods_tensor, para_tensor))
+        loss = self.metric(label,pre)
         loss.backward()
         self.optimiser.step()
         self.scheduler.step()
@@ -90,24 +90,4 @@ class Trainer:
 
         return mask
     
-    def _cal_loss(self,label: torch.Tensor, output: torch.Tensor, mask: torch.Tensor, weight_last: float = 2.0) -> torch.Tensor:
-        B, S, D = label.shape
-
-        weights = torch.ones_like(mask, dtype=label.dtype)
-        weights[:, -1] = weight_last
-
-        valid_mask = ~mask  
-        weights = weights * valid_mask 
-
-        weights = weights.unsqueeze(-1)  # (B, S, 1)
-
-        squared_error = (output - label) ** 2  # (B, S, D)
-        weighted_error = squared_error * weights 
-
-        total_weight = weights.sum()
-        if total_weight == 0:
-            return torch.tensor(0.0, device=label.device)
-
-        loss = weighted_error.sum() / total_weight
-        return loss
 

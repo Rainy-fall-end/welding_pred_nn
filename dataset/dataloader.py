@@ -72,7 +72,7 @@ class WeldTensorFolderDataset(Dataset):
         vi = para_dict["vi"]
         para_tensor = torch.tensor([ui, vi], dtype=torch.float32)
 
-        return out_tensor, start_times_tensor, time_periods_tensor, para_tensor
+        return out_tensor.to(self.device), start_times_tensor.to(self.device), time_periods_tensor.to(self.device), para_tensor.to(self.device)
 
     @property
     def shape(self,idx=0):

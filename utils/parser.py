@@ -44,7 +44,7 @@ def get_args():
                         help='Random seed for reproducibility')
     parser.add_argument('--num_workers', type=int, default=4,
                         help='Number of data loader worker threads')
-    parser.add_argument('--enable_wb', type=False, default=False)
+    parser.add_argument('--enable_wb', type=bool, default=False)
     parser.add_argument("--project_name", type=str, default="Welding_pred")
     parser.add_argument("--run_name", type=str, default="test")
     

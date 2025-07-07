@@ -12,6 +12,12 @@
             "console": "integratedTerminal",
             "args": ["--data_dir",
             "./abaqus_data/data",
+            "--embed_dim",
+            "64",
+            "--batch_size",
+            "4",
+            "--lr",
+            "0.1"
         ]
         }
     ]

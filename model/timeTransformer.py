@@ -14,19 +14,18 @@ class E2Epredictor(nn.Module):
         )
         self.ar = ARImputer(
             d = args.embed_dim,
-            d_model = args.embde_dim // 2,
-            d_ff = args.embde_dim // 2
+            d_model = args.embed_dim // 2,
+            d_ff = args.embed_dim // 2
         )
-    def forward(self,x,mask):
+    def forward(self,x):
         (out_tensor, start_times_tensor, time_periods_tensor, para_tensor) = x
-        out = self.vit.encode(out_tensor) # B,T,D
+        out, pad_info = self.vit.encode(out_tensor) # B,T,D
         out = self.ar(
-            out_tensor = out,
-            start_times_tensor = start_times_tensor,
-            time_periods_tensor = time_periods_tensor,
-            para_tensor = para_tensor,
-            mask = mask
+            x_raw = out,
+            start_times = start_times_tensor,
+            time_periods = time_periods_tensor,
+            para = para_tensor,
         )
-        out = self.vit.decode(out)
+        out = self.vit.decode(out, pad_info)
         return out
     
