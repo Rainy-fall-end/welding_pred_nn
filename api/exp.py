@@ -53,7 +53,7 @@ class Trainer:
 
 
     def _train_one_loop(
-        self, label: torch.utils.data.DataLoader, losses: List[float]) -> Tuple[float, List[float]]:
+        self, label, losses: List[float]) -> Tuple[float, List[float]]:
 
         self.optimiser.zero_grad()
         mask = self._cal_mask(label[0])
