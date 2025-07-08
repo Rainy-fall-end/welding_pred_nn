@@ -27,5 +27,5 @@ class E2Epredictor(nn.Module):
             para = para_tensor,
         )
         out = self.vit.decode(out, pad_info)
-        return out
+        return out #[4, 43, 20, 71, 49]
     
