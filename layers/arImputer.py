@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import Tuple
-
+import torch.nn.functional as F
 # --- 时间嵌入（沿用你之前的 Time2Vec） ---------------------
 class Time2Vec(nn.Module):
     def __init__(self, k: int):
@@ -17,79 +17,78 @@ class Time2Vec(nn.Module):
         per = torch.sin(t.unsqueeze(-1) * self.w + self.b)  # (...,k-1)
         return torch.cat([lin, per], dim=-1)                 # (...,k)
 
-# --- 模型主体 ------------------------------------------------
 class ARImputer(nn.Module):
     """
+    LLM-style autoregressive predictor for continuous frames.
+    ---------------------------------------------
     输入
-    ----
-    x_raw  : (B, D)        – 当前帧特征
-    para   : (B, 2)        – 全局 2-D 参数
-    t_all  : (B, S)        – S 个 start_time
-    p_all  : (B, S)        – S 个 period
-
+        x_seq : (B,S,D)  – 帧特征序列 x₀..x_{S-1}
+        para  : (B,2)    – 全局参数
+        t_seq : (B,S)    – start_time
+        p_seq : (B,S)    – period
     输出
-    ----
-    y_pred : (B, S-1, D)   – 从 t₁ 到 t_{S-1} 的预测
+        y_hat : (B,S-1,D)  – 对 x₁..x_{S-1} 的并行预测
     """
-    def __init__(self,
-                 d: int,                 # D
-                 d_model: int = 256,
-                 d_para: int = 32,
-                 d_time: int = 16,
-                 nhead: int = 8,
-                 num_layers: int = 2,
-                 d_ff: int = 512,
-                 dropout: float = 0.1):
+    def __init__(self, D, d_model=256, d_time=16,
+                 nhead=8, nlayer=4, d_ff=512, dropout=0.1):
         super().__init__()
+        self.D = D
+        # ① Token embed: [x_s ; para] → d_model
+        self.token_proj = nn.Linear(D+2, d_model)
 
-        # ----- 1. Memory token (key/value) -----
-        self.mem_proj = nn.Linear(d + 2, d_model)     # x_raw + para -> mem
+        # ② Time embed  (Time2Vec or sin/cos)
+        self.time_s = Time2Vec(d_time)
+        self.time_c = Time2Vec(d_time)
+        self.time_proj = nn.Linear(2*d_time, d_model)
 
-        # ----- 2. Query token embedding -----
-        self.time_s  = Time2Vec(d_time)
-        self.time_c  = Time2Vec(d_time)
-        self.q_proj  = nn.Linear(2 * d_time, d_model)
+        # ③ Transformer decoder (仅需 encoder+causal mask)
+        block = nn.TransformerEncoderLayer(
+            d_model, nhead, d_ff, dropout, batch_first=True)
+        self.transformer = nn.TransformerEncoder(block, nlayer)
 
-        # ----- 3. Cross-Attention stack -----
-        encoder_layer = nn.TransformerEncoderLayer(d_model, nhead,
-                                                   d_ff, dropout,
-                                                   batch_first=True)
-        self.xattn = nn.TransformerEncoder(encoder_layer,
-                                           num_layers=num_layers)
+        # ④ Prediction head
+        self.head = nn.Linear(d_model, D)
 
-        # ----- 4. Prediction head -----
-        self.head = nn.Linear(d_model, d)
+    # ---------- forward：并行 teacher-forcing ----------
+    def forward(self, x_raw, para, start_times, time_periods):
+        B, S, D = x_raw.shape
+        para_exp = para.unsqueeze(1).expand(-1, S, -1)         # (B,S,2)
+        tok_in   = torch.cat([x_raw, para_exp], -1)            # (B,S,D+2)
+        tok_emb  = self.token_proj(tok_in)                     # (B,S,E)
 
-    # ----------------------------------------------------------
-    def forward(self,
-                x_raw: torch.Tensor,          # (B,D)
-                para: torch.Tensor,           # (B,2)
-                start_times: torch.Tensor,    # (B,S)
-                time_periods: torch.Tensor) -> torch.Tensor:  # (B,S)
+        # time embedding
+        ts_emb = self.time_proj(
+            torch.cat([self.time_s(start_times), self.time_c(time_periods)], -1))  # (B,S,E)
 
-        B, D = x_raw.shape
-        _, S = start_times.shape
-        assert S > 1, "S 必须 ≥2，否则输出为空"
+        h = tok_emb + ts_emb                                   # (B,S,E)
 
-        # ===== 1) Memory token =====
-        mem_token = self.mem_proj(torch.cat([x_raw, para], dim=-1))  # (B,d_model)
-        mem_token = mem_token.unsqueeze(1)                           # (B,1,E)
+        # causal mask (float: 0 or -inf)
+        causal = torch.triu(torch.ones(S, S, device=x_raw.device) * float('-inf'),
+                            diagonal=1)
+        h = self.transformer(h, mask=causal)                   # (B,S,E)
 
-        # ===== 2) Query tokens (含 t0, …, t_{S-1}) =====
-        t_feat = self.time_s(start_times)         # (B,S,d_time)
-        p_feat = self.time_c(time_periods)        # (B,S,d_time)
-        q_emb  = self.q_proj(torch.cat([t_feat, p_feat], dim=-1))    # (B,S,E)
+        y_hat = self.head(h[:, :-1, :])                        # (B,S-1,D)
+        return y_hat           # 预测 x₁..x_{S-1}
 
-        # ===== 3) 拼接形成序列：1 mem + S query =====
-        #    位置：[ mem | q0 | q1 | ... | q_{S-1} ]
-        tokens = torch.cat([mem_token, q_emb], dim=1)                # (B, 1+S, E)
+    # ---------- generate：逐帧自回归 ----------
+    @torch.no_grad()
+    def generate(self, x0, para, start_times, time_periods):
+        """
+        x0   : (B,D)      – 首帧
+        t_all, p_all : (B,S)
+        返回 y_pred : (B,S,D) ，含 x0
+        """
+        B, D = x0.shape
+        S    = start_times.size(1)
+        device = x0.device
 
-        # ===== 4) Cross-Attention Encoder =====
-        #    令 self-Attn 能够让每个 query 看到 mem_token
-        enc_out = self.xattn(tokens)                                 # (B,1+S,E)
+        seq  = torch.zeros(B, S, D, device=device)
+        seq[:, 0] = x0
 
-        # ===== 5) 取第 2..S+1 位 (= q1..q_{S-1}) 预测 =====
-        q_out  = enc_out[:, 2:, :]                # (B,S-1,E)
-        y_pred = self.head(q_out)                 # (B,S-1,D)
-
-        return y_pred
+        for s in range(1, S):
+            y_hat = self.forward(seq[:, :s, :],                # 历史
+                                 para,
+                                 start_times[:, :s], time_periods[:, :s])   # 对应时间
+            x_next = y_hat[:, -1, :]                           # 取最后一步预测
+            seq[:, s] = x_next
+        return seq

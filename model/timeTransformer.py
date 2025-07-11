@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from layers.vit import SequenceViTAutoencoder
 from layers.arImputer import ARImputer
@@ -17,6 +18,7 @@ class E2Epredictor(nn.Module):
             d_model = args.embed_dim // 2,
             d_ff = args.embed_dim // 2
         )
+        
     def forward(self,x):
         (out_tensor, start_times_tensor, time_periods_tensor, para_tensor) = x
         out, pad_info = self.vit.encode(out_tensor) # B,T,D
@@ -29,3 +31,15 @@ class E2Epredictor(nn.Module):
         out = self.vit.decode(out, pad_info)
         return out #[4, 43, 20, 71, 49]
     
+    @torch.no_grad()
+    def evaluate(self,x):
+        (x0, start_times_tensor, time_periods_tensor, para_tensor) = x
+        out, pad_info = self.vit.encode(x0) # B,T,D
+        out = self.ar.generate(
+            x_0 = out,
+            start_times = start_times_tensor,
+            time_periods = time_periods_tensor,
+            para = para_tensor,
+        )
+        out = self.vit.decode(out, pad_info)
+        return out #[4, 43, 20, 71, 49]
