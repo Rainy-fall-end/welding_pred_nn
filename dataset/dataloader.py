@@ -1,7 +1,9 @@
 import os
 import numpy as np
 import torch
-from torch.utils.data import Dataset,DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
+
+
 class WeldTensorFolderDataset(Dataset):
     def __init__(self, data_path, npz_name="weld_data.npz", device=None):
         """
@@ -10,7 +12,7 @@ class WeldTensorFolderDataset(Dataset):
         :param device: 数据加载到的设备，如 'cuda' 或 torch.device
         """
         self.data_paths = []
-        self.device = torch.device(device) if device else torch.device('cpu')
+        self.device = torch.device(device) if device else torch.device("cpu")
 
         for subfolder in sorted(os.listdir(data_path)):
             folder_path = os.path.join(data_path, subfolder)
@@ -28,7 +30,7 @@ class WeldTensorFolderDataset(Dataset):
     def __getitem__(self, idx):
         npz_path = self.data_paths[idx]
         weld_datas = np.load(npz_path, allow_pickle=True)
-        data = weld_datas['data'].item()
+        data = weld_datas["data"].item()
 
         step_names = data.keys()
 
@@ -38,10 +40,10 @@ class WeldTensorFolderDataset(Dataset):
             inst_tensor = []
             for inst in self.instances:
                 try:
-                    u = data[step][inst]['u']     # (71,49,3)
-                    s = data[step][inst]['s']     # (71,49,6)
-                    nt = data[step][inst]['nt']   # (71,49)
-                    nt = nt[:, :, np.newaxis]     # → (71,49,1)
+                    u = data[step][inst]["u"]  # (71,49,3)
+                    s = data[step][inst]["s"]  # (71,49,6)
+                    nt = data[step][inst]["nt"]  # (71,49)
+                    nt = nt[:, :, np.newaxis]  # → (71,49,1)
 
                     all_fields = np.concatenate([u, s, nt], axis=-1)  # (71,49,10)
                     inst_tensor.append(all_fields.transpose(2, 0, 1))  # (10,71,49)
@@ -57,27 +59,34 @@ class WeldTensorFolderDataset(Dataset):
         data_time = weld_datas["worker"]
         start_times = []
         time_periods = []
-        
+
         data_time = weld_datas["worker"]
         time_periods = [item["timePeriod"] for item in data_time]
 
-        start_times = [0.0]  
+        start_times = [0.0]
         for i in range(1, len(time_periods)):
-            start_time = start_times[-1] + time_periods[i-1]  # startTime = previous_endTime + previous_timePeriod
+            start_time = (
+                start_times[-1] + time_periods[i - 1]
+            )  # startTime = previous_endTime + previous_timePeriod
             start_times.append(start_time)
         start_times_tensor = torch.tensor(start_times, dtype=torch.float32)
         time_periods_tensor = torch.tensor(time_periods, dtype=torch.float32)
-        para_dict = weld_datas["para"].item() 
+        para_dict = weld_datas["para"].item()
         ui = para_dict["ui"]
         vi = para_dict["vi"]
         para_tensor = torch.tensor([ui, vi], dtype=torch.float32)
 
-        return out_tensor.to(self.device), start_times_tensor.to(self.device), time_periods_tensor.to(self.device), para_tensor.to(self.device)
+        return (
+            out_tensor.to(self.device),
+            start_times_tensor.to(self.device),
+            time_periods_tensor.to(self.device),
+            para_tensor.to(self.device),
+        )
 
     @property
-    def shape(self,idx=0):
+    def shape(self, idx=0):
         npz_path = self.data_paths[idx]
-        data = np.load(npz_path, allow_pickle=True)['data'].item()
+        data = np.load(npz_path, allow_pickle=True)["data"].item()
 
         step_names = sorted(data.keys(), key=lambda x: x.lower())
         tensors = []
@@ -86,10 +95,10 @@ class WeldTensorFolderDataset(Dataset):
             inst_tensor = []
             for inst in self.instances:
                 try:
-                    u = data[step][inst]['u']     # (71,49,3)
-                    s = data[step][inst]['s']     # (71,49,6)
-                    nt = data[step][inst]['nt']   # (71,49)
-                    nt = nt[:, :, np.newaxis]     # → (71,49,1)
+                    u = data[step][inst]["u"]  # (71,49,3)
+                    s = data[step][inst]["s"]  # (71,49,6)
+                    nt = data[step][inst]["nt"]  # (71,49)
+                    nt = nt[:, :, np.newaxis]  # → (71,49,1)
 
                     all_fields = np.concatenate([u, s, nt], axis=-1)  # (71,49,10)
                     inst_tensor.append(all_fields.transpose(2, 0, 1))  # (10,71,49)
@@ -102,11 +111,23 @@ class WeldTensorFolderDataset(Dataset):
         out_tensor = np.stack(tensors, axis=0)  # (T,2,10,71,49)
         return out_tensor.shape
 
+
 def build_dataset(args):
+    # 构建完整数据集
     dataset = WeldTensorFolderDataset(
-        data_path=args.data_dir,
-        device=args.device   # or None / 'cpu'
+        data_path=args.data_dir, device=args.device  # 例如 'cuda' 或 'cpu'
     )
 
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-    return loader
+    # 计算划分大小
+    total_len = len(dataset)
+    train_len = int(total_len * args.train_ratio)
+    test_len = total_len - train_len
+
+    # 随机划分数据集
+    train_set, test_set = random_split(dataset, [train_len, test_len])
+
+    # 构建 DataLoader
+    train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
+    test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False)
+
+    return train_loader, test_loader

@@ -5,6 +5,7 @@ import shutil
 import sys
 import numpy as np
 from scripts.modify_for import modify_fortran_current_voltage
+import time
 from scripts.utils import (
     create_folder,
     get_side_nodes,
@@ -25,7 +26,8 @@ def run_pipeline(
     cpus: int,
     gpus: int,
     export_script: str,
-    abaqus_cmd: str = "abaqus"
+    abaqus_cmd: str = "abaqus",
+    timeout = 60*15
 ):
     """
     自动执行 Abaqus Job 流程，包括 INP/FOR 扰动、作业提交、导出结果等。
@@ -75,9 +77,8 @@ def run_pipeline(
     # Step 3: 提交 Abaqus Job
     print("▶ 正在提交 Abaqus 作业 ...")
     abaqus_cmd_str = (
-        f'{abaqus_cmd} interactive job={jobname} '
-        f'input="{inp_output}" user="{user_subroutine}" '
-        f'cpus={cpus} gpus={gpus} double=both'
+        f'abaqus job={jobname} input="{inp_output}" '
+        f'user="{user_subroutine}" cpus={cpus} gpus={gpus} double=both'
     )
     print(f"  ⤷ 运行命令: {abaqus_cmd_str}")
     try:
@@ -88,15 +89,17 @@ def run_pipeline(
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
             )
-            proc.communicate()
-            if proc.returncode != 0:
-                raise subprocess.CalledProcessError(proc.returncode, abaqus_cmd_str)
     except subprocess.CalledProcessError:
         print("❌ Abaqus 作业失败，清理临时目录")
         shutil.rmtree(cur_dir)
         return False, None
-
-    print(f"✅ Abaqus 作业已结束，输出日志 → {log_path}")
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        delete_all(jobname)
+        return True, None
+        # raise RuntimeError(f"Abaqus run timed out: {abaqus_cmd_str}")
+    # print(f"✅ Abaqus 作业已结束，输出日志 → {log_path}")
 
     # Step 4: 检查作业完成
     if check_abaqus_completion(jobname):

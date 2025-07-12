@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File with Arguments",
+            "name": "train",
             "type": "debugpy",
             "request": "launch",
             "program": "main.py",
@@ -17,7 +17,18 @@
             "--batch_size",
             "4",
             "--lr",
-            "0.1"
+            "0.1",
+            "--nepochs",
+            "1"
+        ]
+        },
+        {
+            "name": "Python Debugger: Current File with Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
         ]
         }
     ]

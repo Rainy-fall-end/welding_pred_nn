@@ -14,15 +14,21 @@ def create_folder(save_dir_base="data"):
     os.makedirs(save_dir, exist_ok=True)
     return save_dir
 
-import os
-import time
-
 def check_abaqus_completion(jobname: str,
                             delay: int = 12 * 60,           # ⏱ 13 min 的初始等待
-                            timeout: int = 600 * 6 * 5,     # 之后的轮询超时（默认 5h）
+                            timeout: int = 60*5,     # 之后的轮询超时（默认 5h）
                             interval: int = 60):            # 轮询间隔 1 min
     sta_file = f"{jobname}.sta"
-
+    if os.path.exists(sta_file):
+        try:
+            with open(sta_file, "r") as f:
+                content = f.read()
+                if "THE ANALYSIS HAS COMPLETED SUCCESSFULLY" in content:
+                    print("✅ Abaqus 分析已完成")
+                    return True
+        except IOError:
+                # 文件可能仍在写入，暂时忽略
+                print("⚠️ .sta 文件暂时无法读取（可能正在写入）", flush=True)
     # -------- 初始静默等待 --------
     print(f"🕒 先等待 {delay // 60} 分钟再开始检测 Abaqus 状态 ...", flush=True)
     time.sleep(delay)

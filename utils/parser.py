@@ -18,7 +18,7 @@ def get_args():
     parser.add_argument('--C', type=int, default=20)
     parser.add_argument('--embed_dim', type=int, default=20)
     # ====== 训练参数 ======
-    parser.add_argument('--epochs', type=int, default=50,
+    parser.add_argument('--nepochs', type=int, default=50,
                         help='Number of training epochs')
     parser.add_argument('--batch_size', type=int, default=64,
                         help='Batch size for training')
@@ -47,6 +47,7 @@ def get_args():
     parser.add_argument('--enable_wb', type=bool, default=False)
     parser.add_argument("--project_name", type=str, default="Welding_pred")
     parser.add_argument("--run_name", type=str, default="test")
+    parser.add_argument("--train_ratio", type=float, default=0.8)
     
     # ====== 模型恢复与测试 ======
     parser.add_argument('--resume', type=str, default='',
