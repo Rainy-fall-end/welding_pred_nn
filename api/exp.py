@@ -13,7 +13,8 @@ from utils.tensor_convert import (
     flatten_middle_dimensions,
     unflatten_middle_dimensions,
 )
-from api.loss import TemporalWeightedLoss
+from utils.utils import compute_variable_metrics,sample_frames_with_ends
+from api.loss import TemporalWeightedLoss,LastLoss
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import numpy as np
 class Trainer:
@@ -33,6 +34,7 @@ class Trainer:
         self.metric = TemporalWeightedLoss(self.input_shape[0] - 1).to(
             self.args.device
         )
+        self.last_metric = compute_variable_metrics
 
     def fit(
         self
@@ -55,7 +57,7 @@ class Trainer:
         with tqdm(self.train_dataset, unit="batch", disable=disable_tqdm) as tepoch:
             for idx, datas in enumerate(tepoch):
                 i += 1
-                loss, losses = self._train_one_loop(datas=datas, losses=losses)
+                loss, losses, last_metric = self._train_one_loop(datas=datas, losses=losses)
                 epoch_loss += loss.detach()
                 tepoch.set_description(f"Epoch {epoch_no}")
                 tepoch.set_postfix(loss=epoch_loss.item() / i)
@@ -63,7 +65,8 @@ class Trainer:
                 if getattr(self.args, "enable_wb", False):
                     wandb.log(
                         {"train/batch_loss": loss.item()},
-                        step=epoch_no * len(self.train_dataset) + idx,
+                        last_metric,
+                        step=epoch_no * len(self.train_dataset) + idx,   
                     )
 
         if getattr(self.args, "enable_wb", False):
@@ -72,19 +75,21 @@ class Trainer:
         return losses
 
     def _train_one_loop(self, datas, losses: List[float]) -> Tuple[float, List[float]]:
-
         self.optimiser.zero_grad()
         (out_tensor, start_times_tensor, time_periods_tensor, para_tensor) = datas
         out_tensor = flatten_middle_dimensions(out_tensor)
+        if self.args.sample == "random":
+            out_tensor,_ = sample_frames_with_ends(out_tensor,self.args.sample_num)
         x, label = split_train_val(out_tensor)
         self.model.train()
         pre = self.model((x, start_times_tensor, time_periods_tensor, para_tensor))
         loss = self.metric(label, pre)
+        last_metric = self.last_metric(last_metric)
         loss.backward()
         self.optimiser.step()
         self.scheduler.step()
         losses.append(loss.detach())
-        return loss.detach(), losses
+        return loss.detach(), losses, last_metric
 
     @torch.no_grad()
     def evaluate(self, epoch_no=0, disable_tqdm=False):

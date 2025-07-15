@@ -32,3 +32,5 @@ class TemporalWeightedLoss(nn.Module):
         # Apply weights
         weighted_loss = (loss * weights).mean()
         return weighted_loss
+
+

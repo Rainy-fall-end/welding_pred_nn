@@ -58,5 +58,5 @@ def tensor_to_pointcloud_dict(tensor: torch.Tensor) -> dict:
     return result
 
 def split_train_val(tensor: torch.Tensor) -> dict:
-    return tensor[:,0],tensor[:,1:]
+    return tensor[:],tensor[:,1:]
 
