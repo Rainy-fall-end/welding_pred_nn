@@ -52,37 +52,42 @@ def compute_variable_metrics(pred: torch.Tensor, target: torch.Tensor):
         "temperature": compute_metrics(temp_pred, temp_target)
     }
 
-def sample_frames_with_ends(x: torch.Tensor, k: int):
+import torch
+from typing import Tuple, List
+
+def sample_frames_with_ends(
+    tensor,
+    k: int
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, List[int]]:
     """
-    从时间维度 T 中随机采样 k 个时间步，强制保留第一个和最后一个时间帧
-    输入:
-        x: Tensor, shape (B, T, C, H, W)
-        k: int, 要采样的时间帧数, 必须 >= 2
+    随机从时间维度采样 k 个时间步，并强制包含首尾帧。
+    
     返回:
-        x_sampled: Tensor, shape (B, k, C, H, W)
-        selected_indices: List[int], 被采样的时间帧索引
+        out_tensor_sampled   (B, k, C, H, W)
+        start_times_sampled  (B, k)
+        time_periods_sampled (B, k)
+        para_tensor          (B, 2)     —— 原样返回
+        selected_indices     list[int]  —— 采样的时间索引
     """
-    B, T, C, H, W = x.shape
+    (out_tensor, start_times, time_periods, para_tensor) = tensor
+    B, T, C, H, W = out_tensor.shape
     assert k >= 2, "k must be at least 2"
-    assert T >= k, f"T={T} is less than k={k}"
+    assert T >= k, f"T = {T} < k = {k}"
 
-    # 固定帧索引：起始帧和结束帧
-    first_idx = 0
-    last_idx = T - 1
+    # ---- 1. 生成索引 --------------------------------------------------------
+    first_idx, last_idx = 0, T - 1
+    candidate_indices   = list(range(1, T - 1))
+    num_random          = k - 2
 
-    # 可采样区间：[1, T-2]
-    candidate_indices = list(range(1, T - 1))
-    num_random = k - 2
+    rand_idx = torch.randperm(len(candidate_indices))[:num_random]
+    mid_idx  = [candidate_indices[i.item()] for i in rand_idx]
 
-    # 随机采样不重复时间帧
-    random_indices = torch.randperm(len(candidate_indices))[:num_random]
-    selected_middle = [candidate_indices[i.item()] for i in random_indices]
+    selected_indices = sorted([first_idx] + mid_idx + [last_idx])  # 升序
 
-    # 合并并排序索引
-    selected_indices = [first_idx] + selected_middle + [last_idx]
-    selected_indices.sort()  # 可选：保持时间顺序
+    # ---- 2. 采样 -----------------------------------------------------------
+    out_sample  = out_tensor[:, selected_indices]          # (B, k, C, H, W)
+    st_sample   = start_times[:, selected_indices]         # (B, k)
+    tp_sample   = time_periods[:, selected_indices]        # (B, k)
+    out = (out_sample, st_sample, tp_sample, para_tensor)
+    return out, selected_indices
 
-    # 采样张量
-    x_sampled = x[:, selected_indices]  # shape: (B, k, C, H, W)
-
-    return x_sampled, selected_indices

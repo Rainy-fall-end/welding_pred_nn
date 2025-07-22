@@ -10,12 +10,14 @@ def get_args():
                         help='Directory to save model checkpoints')
     parser.add_argument('--log_dir', type=str, default='./logs',
                         help='Directory to save TensorBoard logs')
+    parser.add_argument('--step_nums', type=int, default=44)
+    parser.add_argument('--max_samples', type=int, default=100)
 
     # ====== 模型参数 ======
     parser.add_argument('--model', type=str, default='regression',choices=['regression'])
     parser.add_argument('--H', type=int, default=7)
     parser.add_argument('--W', type=int, default=7)
-    parser.add_argument('--C', type=int, default=20)
+    parser.add_argument('--C', type=int, default=10)
     parser.add_argument('--embed_dim', type=int, default=20)
     # ====== 训练参数 ======
     parser.add_argument('--nepochs', type=int, default=50,

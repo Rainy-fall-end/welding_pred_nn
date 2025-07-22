@@ -29,12 +29,12 @@ class ARImputer(nn.Module):
     输出
         y_hat : (B,S-1,D)  – 对 x₁..x_{S-1} 的并行预测
     """
-    def __init__(self, D, d_model=256, d_time=16,
+    def __init__(self, d, d_model=256, d_time=16,
                  nhead=8, nlayer=4, d_ff=512, dropout=0.1):
         super().__init__()
-        self.D = D
+        self.D = d
         # ① Token embed: [x_s ; para] → d_model
-        self.token_proj = nn.Linear(D + 2, d_model)
+        self.token_proj = nn.Linear(d + 2, d_model)
 
         # ② Time embed (Time2Vec 或 sin/cos)
         self.time_s  = Time2Vec(d_time)
@@ -47,7 +47,7 @@ class ARImputer(nn.Module):
         self.transformer = nn.TransformerEncoder(encoder_layer, nlayer)
 
         # ④ Prediction head
-        self.head = nn.Linear(d_model, D)
+        self.head = nn.Linear(d_model, d)
 
     # ---------- forward：并行 teacher-forcing ----------
     def forward(self, x_raw, para, start_times, time_periods):

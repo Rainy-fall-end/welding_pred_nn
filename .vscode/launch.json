@@ -19,7 +19,13 @@
             "--lr",
             "0.1",
             "--nepochs",
-            "1"
+            "5",
+            "--max_samples",
+            "-1",
+            "--sample",
+            "random",
+            "--sample_num",
+            "20"
         ]
         },
         {

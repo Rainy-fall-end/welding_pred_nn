@@ -7,7 +7,7 @@ class E2Epredictor(nn.Module):
     def __init__(self, args,shape):
         super().__init__()
         self.shape = shape
-        assert args.C == shape[1] * shape[2]
+        assert args.C == shape[1]
         self.vit = SequenceViTAutoencoder(
             img_size=(shape[-2],shape[-1]),
             patch_size=(args.H,args.W),
