@@ -3,52 +3,20 @@ from typing import Tuple, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-# -----------------------------------------------------------------------------
-# Helper: simple MLP used inside Transformer blocks
-# -----------------------------------------------------------------------------
-class MLP(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, drop: float = 0.):
-        super().__init__()
-        self.fc1 = nn.Linear(in_dim, hidden_dim)
-        self.act = nn.GELU()
-        self.fc2 = nn.Linear(hidden_dim, in_dim)
-        self.drop = nn.Dropout(drop)
-
-    def forward(self, x):
-        x = self.drop(self.act(self.fc1(x)))
-        x = self.drop(self.fc2(x))
-        return x
+from layers.attention import SelfAttention,WaveAttention,MLP
 
 # -----------------------------------------------------------------------------
 # Attention + Transformer Block
 # -----------------------------------------------------------------------------
-class Attention(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 8, qkv_bias: bool = True, attn_drop: float = 0., proj_drop: float = 0.):
-        super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = head_dim ** -0.5
-
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
-
-    def forward(self, x):
-        B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads)
-        q, k, v = qkv.permute(2, 0, 3, 1, 4)  # (3, B, heads, N, head_dim)
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = self.attn_drop(attn.softmax(-1))
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
-        return self.proj_drop(self.proj(x))
 
 class Block(nn.Module):
-    def __init__(self, dim: int, num_heads: int, mlp_ratio: float = 4., qkv_bias: bool = True, drop: float = 0., attn_drop: float = 0.):
+    def __init__(self, atten_type:str, dim: int, num_heads: int, mlp_ratio: float = 4., qkv_bias: bool = True, drop: float = 0., attn_drop: float = 0.):
         super().__init__()
         self.norm1 = nn.LayerNorm(dim)
-        self.attn = Attention(dim, num_heads, qkv_bias, attn_drop, drop)
+        if atten_type == "self":
+            self.attn = SelfAttention(dim, num_heads, qkv_bias, attn_drop, drop)
+        elif atten_type == "wave":
+            self.attn = WaveAttention(dim, num_heads, qkv_bias, attn_drop, drop)
         self.norm2 = nn.LayerNorm(dim)
         self.mlp = MLP(dim, int(dim * mlp_ratio), drop=drop)
 
@@ -119,13 +87,13 @@ class PatchReconstruct(nn.Module):
 # ViT Encoder / Decoder (single frame)
 # -----------------------------------------------------------------------------
 class ViTEncoder(nn.Module):
-    def __init__(self, img_size: Tuple[int, int], patch_size: Tuple[int, int], in_chans: int, embed_dim: int,
+    def __init__(self, atten_type:str, img_size: Tuple[int, int], patch_size: Tuple[int, int], in_chans: int, embed_dim: int,
                  depth: int, num_heads: int, mlp_ratio: float, drop: float):
         super().__init__()
         self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
         self.pos_embed = nn.Parameter(torch.zeros(1, self.patch_embed.n_patches, embed_dim))
         nn.init.trunc_normal_(self.pos_embed, std=.02)
-        self.blocks = nn.Sequential(*[Block(embed_dim, num_heads, mlp_ratio, drop=drop) for _ in range(depth)])
+        self.blocks = nn.Sequential(*[Block(atten_type, embed_dim, num_heads, mlp_ratio, drop=drop) for _ in range(depth)])
         self.norm = nn.LayerNorm(embed_dim)
 
     def forward(self, x: torch.Tensor):
@@ -135,7 +103,7 @@ class ViTEncoder(nn.Module):
         return self.norm(patches), pad_info              # (B, N, D), pad_info
 
 class ViTDecoder(nn.Module):
-    def __init__(self, img_size: Tuple[int, int], patch_size: Tuple[int, int], embed_dim: int, out_chans: int,
+    def __init__(self, atten_type:str, img_size: Tuple[int, int], patch_size: Tuple[int, int], embed_dim: int, out_chans: int,
                  depth: int, num_heads: int, mlp_ratio: float, drop: float):
         super().__init__()
         # pos_embed length must match the maximum possible patches
@@ -146,7 +114,7 @@ class ViTDecoder(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, n_patches, embed_dim))
         nn.init.trunc_normal_(self.pos_embed, std=.02)
 
-        self.blocks = nn.Sequential(*[Block(embed_dim, num_heads, mlp_ratio, drop=drop) for _ in range(depth)])
+        self.blocks = nn.Sequential(*[Block(atten_type, embed_dim, num_heads, mlp_ratio, drop=drop) for _ in range(depth)])
         self.norm = nn.LayerNorm(embed_dim)
         self.reconstruct = PatchReconstruct(patch_size, embed_dim, out_chans)
 
@@ -160,11 +128,11 @@ class ViTDecoder(nn.Module):
 # Frame-level Autoencoder
 # -----------------------------------------------------------------------------
 class ViTAutoencoder(nn.Module):
-    def __init__(self, img_size: Tuple[int, int], patch_size: Tuple[int, int], in_chans: int, embed_dim: int,
+    def __init__(self, args, img_size: Tuple[int, int], patch_size: Tuple[int, int], in_chans: int, embed_dim: int,
                  enc_depth: int, dec_depth: int, enc_heads: int, dec_heads: int, mlp_ratio: float):
         super().__init__()
-        self.encoder = ViTEncoder(img_size, patch_size, in_chans, embed_dim, enc_depth, enc_heads, mlp_ratio, 0.)
-        self.decoder = ViTDecoder(img_size, patch_size, embed_dim, in_chans, dec_depth, dec_heads, mlp_ratio, 0.)
+        self.encoder = ViTEncoder(args.block_type, img_size, patch_size, in_chans, embed_dim, enc_depth, enc_heads, mlp_ratio, 0.)
+        self.decoder = ViTDecoder(args.block_type, img_size, patch_size, embed_dim, in_chans, dec_depth, dec_heads, mlp_ratio, 0.)
 
     def encode(self, x: torch.Tensor):
         return self.encoder(x)  # (patch_latent, pad_info)
@@ -182,6 +150,7 @@ class ViTAutoencoder(nn.Module):
 # -----------------------------------------------------------------------------
 class SequenceViTAutoencoder(nn.Module):
     def __init__(self,
+                 args = None,
                  img_size: Tuple[int, int] = (224, 224),
                  patch_size: Tuple[int, int] = (16, 16),
                  in_chans: int = 3,
@@ -192,7 +161,7 @@ class SequenceViTAutoencoder(nn.Module):
                  dec_heads: int = 8,
                  mlp_ratio: float = 4.):
         super().__init__()
-        self.frame_ae = ViTAutoencoder(img_size, patch_size, in_chans, embed_dim,
+        self.frame_ae = ViTAutoencoder(args, img_size, patch_size, in_chans, embed_dim,
                                        enc_depth, dec_depth, enc_heads, dec_heads, mlp_ratio)
         ph, pw = patch_size
         gh = (img_size[0] + ph - 1) // ph

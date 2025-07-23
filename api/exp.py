@@ -12,7 +12,8 @@ from utils.tensor_convert import (
     flatten_middle_dimensions,
     unflatten_middle_dimensions,
 )
-from utils.utils import compute_variable_metrics,sample_frames_with_ends
+from utils.utils import compute_variable_metrics
+from layers.samples import sample_frames_with_ends
 from api.loss import TemporalWeightedLoss
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import numpy as np
@@ -75,8 +76,6 @@ class Trainer:
 
     def _train_one_loop(self, datas, losses: List[float]) -> Tuple[float, List[float]]:
         self.optimiser.zero_grad()
-        if self.args.sample == "random":
-            datas,_ = sample_frames_with_ends(datas,self.args.sample_num)
         (out_tensor, start_times_tensor, time_periods_tensor, para_tensor) = datas
         # out_tensor = flatten_middle_dimensions(out_tensor)
         x, label = split_train_val(out_tensor)

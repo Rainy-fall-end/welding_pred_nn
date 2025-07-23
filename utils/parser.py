@@ -19,6 +19,7 @@ def get_args():
     parser.add_argument('--W', type=int, default=7)
     parser.add_argument('--C', type=int, default=10)
     parser.add_argument('--embed_dim', type=int, default=20)
+    parser.add_argument('--block_type',type=str,default='self',choices=['self','wave'])
     # ====== 训练参数 ======
     parser.add_argument('--nepochs', type=int, default=50,
                         help='Number of training epochs')
@@ -30,7 +31,7 @@ def get_args():
                         help='Weight decay (L2 regularization)')
     parser.add_argument('--weight_last', type=float, default=2)
     # ====== 采样 ======
-    parser.add_argument('--sample',type=str,default="",choices=["","random","gumbel"])
+    parser.add_argument('--sample',type=str,default="none",choices=["none","random","strided"])
     parser.add_argument('--sample_num',type=int,default=10)
     # ====== 优化器与调度器 ======
     parser.add_argument('--optimizer', type=str, default='adam',
