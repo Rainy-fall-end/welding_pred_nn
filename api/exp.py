@@ -1,5 +1,4 @@
 import torch.optim
-import torch.nn as nn
 import wandb
 from tqdm import tqdm
 from typing import List, Tuple
@@ -71,7 +70,6 @@ class Trainer:
 
         if getattr(self.args, "enable_wb", False):
             wandb.log({"train/epoch_loss": (epoch_loss.item() / i), "epoch": epoch_no})
-
         return losses
 
     def _train_one_loop(self, datas, losses: List[float]) -> Tuple[float, List[float]]:
