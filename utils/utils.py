@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-
+import numpy as np
 def build_causal_mask(L: int, device=None):
     """
     返回 shape=(L,L) 的上三角布尔掩码。
@@ -90,3 +90,40 @@ def gather_by_idx(x, idx):
     # 再扩展到 x 的剩余维度
     idx_exp = idx_exp.expand(-1, -1, *x.shape[2:])  # (B, k, C, H, W, ...)
     return torch.gather(x, 1, idx_exp)               # (B, k, C, H, W, ...)
+
+def flatten_dict(d, parent_key="", sep="/"):
+    """
+    将任意层级嵌套字典展开为扁平字典，键名通过 sep 拼接
+    """
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            # 如果值是 numpy / torch.Tensor，可转 float
+            try:
+                if isinstance(v, torch.Tensor):
+                    v = v.item()
+                elif isinstance(v, np.generic):
+                    v = v.item()
+            except ImportError:
+                pass
+            items.append((new_key, v))
+    return dict(items)
+
+def split_params(model):
+    gumbel_params = []
+    other_params = []
+    for name, p in model.named_parameters():
+        if 'gumbel_selector' in name:
+            gumbel_params.append(p)
+        else:
+            other_params.append(p)
+    return gumbel_params, other_params
+
+def safe_mean(vals):
+    vals = [v for v in vals if v is not None]
+    if len(vals) == 0:
+        return None
+    return sum(vals) / len(vals)

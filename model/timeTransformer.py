@@ -57,13 +57,11 @@ class E2Epredictor(nn.Module):
 
         idx = self.sample_fn((ctx[0],para))                             # (B,k)
 
-        # 3️⃣ 按相同 idx 对所有序列做 gather
         out_tensor   = gather_by_idx(out_tensor,   idx)
         start_times  = gather_by_idx(start_times,  idx)
         time_periods = gather_by_idx(time_periods, idx)
         para         = para                                    # (B,2)  不随 T 变
 
-        # 4️⃣ 后续编码 → ARImputer → 解码
         z, pad = self.vit.encode(out_tensor)                   # (B,k,D)
         z = self.ar(
             x_raw=z,

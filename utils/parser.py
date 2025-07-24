@@ -25,11 +25,15 @@ def get_args():
                         help='Number of training epochs')
     parser.add_argument('--batch_size', type=int, default=64,
                         help='Batch size for training')
-    parser.add_argument('--lr', type=float, default=0.001,
+    parser.add_argument('--lr_main', type=float, default=0.1,
                         help='Initial learning rate')
-    parser.add_argument('--weight_decay', type=float, default=1e-5,
+    parser.add_argument('--wd_main', type=float, default=1e-3,
                         help='Weight decay (L2 regularization)')
-    parser.add_argument('--weight_last', type=float, default=2)
+    parser.add_argument('--lr_gumbel', type=float, default=1e-3,
+                        help='Initial learning rate')
+    parser.add_argument('--wd_gumbel', type=float, default=1e-5,
+                        help='Weight decay (L2 regularization)')
+    parser.add_argument('--weight_last', type=float, default=0.8)
     # ====== 采样 ======
     parser.add_argument('--sample',type=str,default="none",choices=["none","random","strided","gumbel"])
     parser.add_argument('--sample_num',type=int,default=10)
