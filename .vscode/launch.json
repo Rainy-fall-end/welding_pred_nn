@@ -45,11 +45,13 @@
             "--nepochs",
             "5",
             "--max_samples",
-            "20",
+            "-1",
             "--sample",
             "gumbel",
             "--sample_num",
-            "20"
+            "10",
+            "--enable_wb",
+            "True"
         ]
         },
         {
