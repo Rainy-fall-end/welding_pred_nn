@@ -127,3 +127,19 @@ def safe_mean(vals):
     if len(vals) == 0:
         return None
     return sum(vals) / len(vals)
+
+def flatten_with_slash(d, parent_key=""):
+    flat = {}
+    for k, v in d.items():
+        nk = f"{parent_key}/{k}" if parent_key else k
+        if isinstance(v, dict):
+            flat.update(flatten_with_slash(v, nk))
+        else:
+            # to python scalar
+            if hasattr(v, "item"):
+                try:
+                    v = v.item()
+                except Exception:
+                    pass
+            flat[nk] = v
+    return flat
