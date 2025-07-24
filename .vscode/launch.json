@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "train",
+            "name": "train_base",
             "type": "debugpy",
             "request": "launch",
             "program": "main.py",
@@ -21,9 +21,33 @@
             "--nepochs",
             "5",
             "--max_samples",
-            "-1",
+            "20",
             "--sample",
             "random",
+            "--sample_num",
+            "20"
+        ]
+        },
+        {
+            "name": "train_former",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "args": ["--data_dir",
+            "./abaqus_data/data",
+            "--embed_dim",
+            "64",
+            "--batch_size",
+            "4",
+            "--lr",
+            "0.1",
+            "--nepochs",
+            "5",
+            "--max_samples",
+            "20",
+            "--sample",
+            "gumbel",
             "--sample_num",
             "20"
         ]

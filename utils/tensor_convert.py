@@ -1,11 +1,5 @@
 import torch
 def flatten_middle_dimensions(tensor):
-    """
-    将 shape 为 (B, T, 2, 10, 71, 49) 的张量重塑为 (B, T*2*10, 71, 49)
-
-    :param tensor: torch.Tensor，shape = (B, T, 2, 10, 71, 49)
-    :return: torch.Tensor，shape = (B, T*2*10, 71, 49)
-    """
     B, T, I, C, H, W = tensor.shape
     return tensor.view(B, T , I * C, H, W)
 
@@ -58,5 +52,5 @@ def tensor_to_pointcloud_dict(tensor: torch.Tensor) -> dict:
     return result
 
 def split_train_val(tensor: torch.Tensor) -> dict:
-    return tensor[:],tensor[:,1:]
+    return tensor[:],tensor[:]
 

@@ -31,7 +31,7 @@ def get_args():
                         help='Weight decay (L2 regularization)')
     parser.add_argument('--weight_last', type=float, default=2)
     # ====== 采样 ======
-    parser.add_argument('--sample',type=str,default="none",choices=["none","random","strided"])
+    parser.add_argument('--sample',type=str,default="none",choices=["none","random","strided","gumbel"])
     parser.add_argument('--sample_num',type=int,default=10)
     # ====== 优化器与调度器 ======
     parser.add_argument('--optimizer', type=str, default='adam',

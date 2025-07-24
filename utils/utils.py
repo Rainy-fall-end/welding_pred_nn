@@ -11,45 +11,82 @@ def build_causal_mask(L: int, device=None):
 
 def compute_variable_metrics(pred: torch.Tensor, target: torch.Tensor):
     """
-    计算最后一个时间步，各变量的 MAE, MSE, RMSE, R²
+    对 10 个通道（3 位移, 6 应力, 1 温度）分别计算：
+        1) 最后一个时间步的 MAE/MSE/RMSE/R²
+        2) 整个序列 (T) 的平均 MAE/MSE/RMSE/R²
     输入:
         pred, target: (B, T, C=10, H, W)
     输出:
-        dict: 包含每类变量的四个误差指标
+        dict ──{
+            displacement: {last: {...}, overall: {...}},
+            stress      : {last: {...}, overall: {...}},
+            temperature : {last: {...}, overall: {...}}
+        }
     """
     B, T, C, H, W = pred.shape
     assert C == 10, "Expected 10 channels: 3 disp, 6 stress, 1 temp"
 
-    pred_last = pred[:, -1]     # (B, C, H, W)
-    target_last = target[:, -1]
+    # ---------- 拆分 ----------
+    disp_pred_last    = pred[:, -1, 0:3]      # (B, 3, H, W)
+    stress_pred_last  = pred[:, -1, 3:9]
+    temp_pred_last    = pred[:, -1, 9:10]
 
-    # 变量切分
-    disp_pred = pred_last[:, 0:3]
-    stress_pred = pred_last[:, 3:9]
-    temp_pred = pred_last[:, 9:10]
+    disp_pred_all     = pred[:, :, 0:3]       # (B, T, 3, H, W)
+    stress_pred_all   = pred[:, :, 3:9]
+    temp_pred_all     = pred[:, :, 9:10]
 
-    disp_target = target_last[:, 0:3]
-    stress_target = target_last[:, 3:9]
-    temp_target = target_last[:, 9:10]
+    disp_target_last  = target[:, -1, 0:3]
+    stress_target_last= target[:, -1, 3:9]
+    temp_target_last  = target[:, -1, 9:10]
 
+    disp_target_all   = target[:, :, 0:3]
+    stress_target_all = target[:, :, 3:9]
+    temp_target_all   = target[:, :, 9:10]
+
+    # ---------- 统一计算 ----------
     def compute_metrics(x: torch.Tensor, y: torch.Tensor):
+        """
+        x, y: 任意维度相同的 Tensor
+        return: dict of scalar errors
+        """
         x_flat = x.reshape(-1)
         y_flat = y.reshape(-1)
-        mae = F.l1_loss(x_flat, y_flat, reduction='mean')
-        mse = F.mse_loss(x_flat, y_flat, reduction='mean')
+
+        mae  = F.l1_loss(x_flat, y_flat, reduction='mean')
+        mse  = F.mse_loss(x_flat, y_flat, reduction='mean')
         rmse = torch.sqrt(mse)
-        var_y = torch.var(y_flat, unbiased=False)
-        r2 = 1 - mse / (var_y + 1e-8)
+        var  = torch.var(y_flat, unbiased=False)
+        r2   = 1 - mse / (var + 1e-8)
+
         return {
-            "mae": mae.item(),
-            "mse": mse.item(),
+            "mae":  mae.item(),
+            "mse":  mse.item(),
             "rmse": rmse.item(),
-            "r2": r2.item()
+            "r2":   r2.item()
         }
 
+    # ---------- 输出 ----------
     return {
-        "displacement": compute_metrics(disp_pred, disp_target),
-        "stress": compute_metrics(stress_pred, stress_target),
-        "temperature": compute_metrics(temp_pred, temp_target)
+        "displacement": {
+            "last":    compute_metrics(disp_pred_last,   disp_target_last),
+            "overall": compute_metrics(disp_pred_all,    disp_target_all)
+        },
+        "stress": {
+            "last":    compute_metrics(stress_pred_last, stress_target_last),
+            "overall": compute_metrics(stress_pred_all,  stress_target_all)
+        },
+        "temperature": {
+            "last":    compute_metrics(temp_pred_last,   temp_target_last),
+            "overall": compute_metrics(temp_pred_all,    temp_target_all)
+        }
     }
 
+def gather_by_idx(x, idx):
+    # x : (B, T, C, H, W, ...)
+    # idx: (B, k)
+    B, k = idx.shape
+    # 先把 idx 的后续维度补 1
+    idx_exp = idx.view(B, k, *([1] * (x.dim() - 2)))
+    # 再扩展到 x 的剩余维度
+    idx_exp = idx_exp.expand(-1, -1, *x.shape[2:])  # (B, k, C, H, W, ...)
+    return torch.gather(x, 1, idx_exp)               # (B, k, C, H, W, ...)
