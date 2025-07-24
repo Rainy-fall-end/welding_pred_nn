@@ -209,3 +209,5 @@ __marimo__/
 wandb/
 new_dara/
 data.zip
+
+*.pptx

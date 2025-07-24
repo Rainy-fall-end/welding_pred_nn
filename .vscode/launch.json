@@ -49,7 +49,9 @@
             "--sample_num",
             "10",
             "--enable_wb",
-            "True"
+            "True",
+            "--run_name",
+            "gumbel"
         ]
         },
         {
