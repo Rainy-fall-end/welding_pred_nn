@@ -20,7 +20,7 @@ class Trainer:
         self.model = E2Epredictor(args, self.input_shape).to(
             device=args.device
         )
-        self.gumbel_params, self.other_params = split_params(self.model, keyword="gumbel_selector")
+        self.gumbel_params, self.other_params = split_params(self.model, keywords="gumbel_selector")
 
         # 主干（非 gumbel）优化器
         self.opt_main = torch.optim.Adam(

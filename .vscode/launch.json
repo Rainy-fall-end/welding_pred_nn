@@ -40,8 +40,6 @@
             "64",
             "--batch_size",
             "4",
-            "--lr",
-            "0.1",
             "--nepochs",
             "5",
             "--max_samples",
@@ -52,6 +50,28 @@
             "10",
             "--enable_wb",
             "True"
+        ]
+        },
+        {
+            "name": "train_former_debug",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "args": ["--data_dir",
+            "./abaqus_data/data",
+            "--embed_dim",
+            "64",
+            "--batch_size",
+            "4",
+            "--nepochs",
+            "1",
+            "--max_samples",
+            "20",
+            "--sample",
+            "gumbel",
+            "--sample_num",
+            "10"
         ]
         },
         {

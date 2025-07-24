@@ -112,11 +112,11 @@ def flatten_dict(d, parent_key="", sep="/"):
             items.append((new_key, v))
     return dict(items)
 
-def split_params(model):
+def split_params(model,keywords="gumbel_selector"):
     gumbel_params = []
     other_params = []
     for name, p in model.named_parameters():
-        if 'gumbel_selector' in name:
+        if keywords in name:
             gumbel_params.append(p)
         else:
             other_params.append(p)
