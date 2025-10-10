@@ -211,3 +211,7 @@ new_dara/
 data.zip
 
 *.pptx
+
+visualize/
+
+*.tif
