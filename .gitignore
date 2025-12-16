@@ -215,3 +215,5 @@ data.zip
 visualize/
 
 *.tif
+Qwen/
+GRPO-PyTorch/

@@ -50,7 +50,7 @@ def main():
     parser.add_argument('--cpus', default="4")
     parser.add_argument('--gpus', default="1")
     parser.add_argument('--export_script', default="export_all_data.py")
-    parser.add_argument('--cmd', default="abaqus", help="abaqus路径")
+    parser.add_argument('--cmd', default="abaqus2025", help="abaqus路径")
     
     args = parser.parse_args()
 

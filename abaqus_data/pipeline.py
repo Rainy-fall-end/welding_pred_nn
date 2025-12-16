@@ -2,10 +2,10 @@
 import subprocess
 import os
 import shutil
+import math
 import sys
 import numpy as np
-from scripts.modify_for import modify_fortran_current_voltage
-import time
+from scripts.modify_for import modify_fortran_current_voltage,generate_dflux_stepwise_fortran
 from scripts.utils import (
     create_folder,
     get_side_nodes,
@@ -15,6 +15,35 @@ from scripts.utils import (
 )
 from scripts.create_inp import perturb_inp_z
 from postprocess.csv2npz import convert_matrix
+
+def cal_E(data_dict,workers,E0 = 100.0):
+    E = np.zeros((71, 2))      # 能量矩阵
+    instances = ["P4_19-2", "P4_19-1"]
+    for i, w in enumerate(workers):
+        dt = w["timePeriod"]
+
+        for j, ins in enumerate(instances):
+            T = data_dict[w["step_name"]][ins]["nt"]   # shape: (71, N, 3) or (71, N)
+
+            Ti = T[i]                  # 第 i 个时间
+            T_mean = Ti.mean()         # 空间 + 分量平均
+            E[i, j] = T_mean * dt
+
+    reward_matrix = np.minimum(E - E0, 0.0)
+    reward = reward_matrix.mean(axis=1)
+    return reward
+def cal_U(data_dict):
+    instances = ["P4_19-1", "P4_19-2"]
+
+    u_means = [data_dict["unflatten"][ins]["u"].mean() for ins in instances] - 0.0002
+
+    s_target = 0.0  # 你的阈值
+    rewards = [-max(u_mean - s_target, 0) for u_mean in u_means]
+
+    # 合成一个 scalar reward
+    reward = min(rewards)  # 最严格约束
+    return reward
+
 def run_pipeline(
     inp_path: str,
     part: str,
@@ -27,7 +56,14 @@ def run_pipeline(
     gpus: int,
     export_script: str,
     abaqus_cmd: str = "abaqus",
-    timeout = 60*15
+    timeout = 60*40,
+    current_voltage_seq = [
+        (0,12,42),
+        (1,4,32),
+        (2,120,32),
+        (4,10,200)
+    ]
+    
 ):
     """
     自动执行 Abaqus Job 流程，包括 INP/FOR 扰动、作业提交、导出结果等。
@@ -67,13 +103,16 @@ def run_pipeline(
 
     # Step 2: 生成扰动后的 .for
     print("▶ 正在生成扰动后的 .for 文件 ...")
-    new_wu, new_wi, _ = modify_fortran_current_voltage(
-        fortran_path=fortran_template,
-        output_path=user_subroutine,
-        wu_range=wu_range,
-        wi_range=wi_range,
+    # new_wu, new_wi, _ = modify_fortran_current_voltage(
+    #     fortran_path=fortran_template,
+    #     output_path=user_subroutine,
+    #     wu_range=wu_range,
+    #     wi_range=wi_range,
+    # )
+    w_iv = generate_dflux_stepwise_fortran(
+        output_path = user_subroutine,
+        current_voltage_seq =  current_voltage_seq
     )
-
     # Step 3: 提交 Abaqus Job
     print("▶ 正在提交 Abaqus 作业 ...")
     abaqus_cmd_str = (
@@ -92,12 +131,12 @@ def run_pipeline(
     except subprocess.CalledProcessError:
         print("❌ Abaqus 作业失败，清理临时目录")
         shutil.rmtree(cur_dir)
-        return False, None
+        return False, None, math.inf
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.communicate()
         delete_all(jobname)
-        return True, None
+        return True, None, math.inf
         # raise RuntimeError(f"Abaqus run timed out: {abaqus_cmd_str}")
     # print(f"✅ Abaqus 作业已结束，输出日志 → {log_path}")
 
@@ -129,12 +168,13 @@ def run_pipeline(
         wait_and_move(src, dst, timeout=60, retry_interval=1)
     res = convert_matrix(os.path.join(cur_dir, "out.csv_results.csv"),os.path.join(cur_dir, "out.csv_steps.csv"))
     res["para"] = {}
-    res["para"]["ui"] = new_wu
-    res["para"]["vi"] = new_wi
+    res["para"]["ui"] = w_iv
+    res["para"]["vi"] = w_iv
     npz_path = os.path.join(cur_dir, "weld_data.npz")
     np.savez_compressed(npz_path,**res)
     # Step 7: 清理临时文件
     delete_all(jobname)
     print(f"✅ 全流程结束，输出文件保存在: {cur_dir}")
-    
-    return True, cur_dir
+    reward_e = cal_E(data_dict=res["data"].item(),workers=res["worker"],E0=55)
+    reward_u = cal_U(data_dict=res["data"].item())
+    return True, cur_dir, reward_e+reward_u
