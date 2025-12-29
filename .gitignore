@@ -217,3 +217,5 @@ visualize/
 *.tif
 Qwen/
 GRPO-PyTorch/
+data/
+some_logs.txt

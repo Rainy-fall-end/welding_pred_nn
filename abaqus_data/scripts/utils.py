@@ -15,8 +15,8 @@ def create_folder(save_dir_base="data"):
     return save_dir
 
 def check_abaqus_completion(jobname: str,
-                            delay: int = 12 * 60,           # ⏱ 13 min 的初始等待
-                            timeout: int = 60*5,     # 之后的轮询超时（默认 5h）
+                            delay: int = 15*60,           # ⏱ 13 min 的初始等待
+                            timeout: int = 60*15,     # 之后的轮询超时（默认 5h）
                             interval: int = 60):            # 轮询间隔 1 min
     sta_file = f"{jobname}.sta"
     if os.path.exists(sta_file):

@@ -104,9 +104,19 @@
             "name": "Python Debugger: Current File with Arguments",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "rl_main.py",
             "console": "integratedTerminal",
             "args": [
+                "--wu_min",
+                "15",
+                "--wu_max",
+                "20",
+                "--wi_min",
+                "35",
+                "--wi_max",
+                "50",
+                "--t",
+                "6"
         ]
         }
     ]

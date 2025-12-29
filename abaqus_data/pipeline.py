@@ -16,9 +16,10 @@ from scripts.utils import (
 from scripts.create_inp import perturb_inp_z
 from postprocess.csv2npz import convert_matrix
 
-def cal_E(data_dict,workers,E0 = 100.0):
+def cal_E(data_dict,workers,E0 = 680.0):
     E = np.zeros((71, 2))      # 能量矩阵
     instances = ["P4_19-2", "P4_19-1"]
+    
     for i, w in enumerate(workers):
         dt = w["timePeriod"]
 
@@ -30,12 +31,26 @@ def cal_E(data_dict,workers,E0 = 100.0):
             E[i, j] = T_mean * dt
 
     reward_matrix = np.minimum(E - E0, 0.0)
-    reward = reward_matrix.mean(axis=1)
-    return reward
+    # reward = reward_matrix.mean(axis=1)
+    
+    return reward_matrix.mean()
+
 def cal_U(data_dict):
     instances = ["P4_19-1", "P4_19-2"]
 
-    u_means = [data_dict["unflatten"][ins]["u"].mean() for ins in instances] - 0.0002
+    u_means = [data_dict["unflatten"][ins]["u"].mean() - 0.0002 for ins in instances]
+
+    s_target = 0.0  # 你的阈值
+    rewards = [-max(u_mean - s_target, 0) for u_mean in u_means]
+
+    # 合成一个 scalar reward
+    reward = min(rewards)  # 最严格约束
+    return reward
+
+def cal_S(data_dict):
+    instances = ["P4_19-1", "P4_19-2"]
+
+    u_means = [abs(data_dict["unflatten"][ins]["s"]).mean() for ins in instances]
 
     s_target = 0.0  # 你的阈值
     rewards = [-max(u_mean - s_target, 0) for u_mean in u_means]
@@ -131,12 +146,12 @@ def run_pipeline(
     except subprocess.CalledProcessError:
         print("❌ Abaqus 作业失败，清理临时目录")
         shutil.rmtree(cur_dir)
-        return False, None, math.inf
+        return False, None, None
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.communicate()
         delete_all(jobname)
-        return True, None, math.inf
+        return True, None, None
         # raise RuntimeError(f"Abaqus run timed out: {abaqus_cmd_str}")
     # print(f"✅ Abaqus 作业已结束，输出日志 → {log_path}")
 
@@ -175,6 +190,7 @@ def run_pipeline(
     # Step 7: 清理临时文件
     delete_all(jobname)
     print(f"✅ 全流程结束，输出文件保存在: {cur_dir}")
-    reward_e = cal_E(data_dict=res["data"].item(),workers=res["worker"],E0=55)
-    reward_u = cal_U(data_dict=res["data"].item())
-    return True, cur_dir, reward_e+reward_u
+    reward_e = cal_E(data_dict=res["data"],workers=res["worker"],E0=55)
+    reward_u = cal_U(data_dict=res["data"])
+    reward_s = cal_S(data_dict=res["data"])
+    return True, cur_dir, [reward_e,reward_u,reward_s]

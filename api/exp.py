@@ -13,7 +13,6 @@ from utils.utils import compute_variable_metrics,gather_by_idx,flatten_with_slas
 from api.loss import TemporalWeightedLoss
 from collections import defaultdict
 import torch
-from collections import defaultdict
 from tqdm import tqdm
 class Trainer:
     def __init__(self, args):
