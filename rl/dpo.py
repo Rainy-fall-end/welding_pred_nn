@@ -403,10 +403,11 @@ def build_batch_args() -> argparse.Namespace:
     parser.add_argument("--gpus", default="1")
     parser.add_argument("--export_script", default="abaqus_data/export_all_data.py")
     parser.add_argument("--cmd", default="abaqus")
+    parser.add_argument("--cmd_path", default=r"C:\apps\engine\abaqus2022\commands\abaqus.bat")
     parser.add_argument("--t", type=int, default=5)
     parser.add_argument("--w_e", default=1)
     parser.add_argument("--w_u", default=1e+3)
-    parser.add_argument("--w_s", default=1e-7)
+    parser.add_argument("--w_s", default=1e-8)
 
     # batch_runner 里还有 max_runs/delay，但 RL 训练里不靠它；仍保留以便 run_one_job 内 sleep 使用
     parser.add_argument("--delay", type=int, default=0)

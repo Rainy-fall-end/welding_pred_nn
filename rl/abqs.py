@@ -108,7 +108,7 @@ def run_one_job(
         "gpus": int(args.gpus),
         "export_script": args.export_script,
         "abaqus_cmd": args.cmd,
-
+        "cmd_path": args.cmd_path,
         # ✅ 强化学习动作入口：把电压序列传给 run_pipeline
         "current_voltage_seq": current_voltage_seq,
     }

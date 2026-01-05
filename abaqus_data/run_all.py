@@ -17,6 +17,7 @@ def run_one_job(run_id, args):
         "gpus": int(args.gpus),
         "export_script": args.export_script,
         "abaqus_cmd": args.cmd,
+        "cmd_path": args.cmd_path
     }
 
     print(f"▶▶▶ [第 {run_id+1} 次] 正在运行: {jobname}")

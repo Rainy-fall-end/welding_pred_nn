@@ -15,48 +15,114 @@ from scripts.utils import (
 )
 from scripts.create_inp import perturb_inp_z
 from postprocess.csv2npz import convert_matrix
+from typing import Optional
+from pathlib import Path
 
+def run_abaqus_bat_python_export(
+    abaqus_bat: str,
+    export_script: str,
+    jobname: str,
+    out_csv: str = "out.csv",
+    workdir: Optional[str] = None,
+    log_path: Optional[str] = None,
+):
+    """
+    Windows: 使用 cmd.exe /c 调用 abaqus.bat，执行：
+      abaqus python export_script jobname.odb out.csv
+
+    - shell=False（推荐）
+    - 兼容路径含空格：在 shell=False + list args 下，不要手动加引号
+    """
+    # 不要 strip('"') 去“修正”路径：用户传入带引号/不带引号都能处理
+    # 这里做一个温和的去引号（仅去首尾一对引号）
+    def dequote(s: str) -> str:
+        s = s.strip()
+        if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+            return s[1:-1]
+        return s
+
+    abaqus_bat_p = Path(dequote(abaqus_bat)).resolve()
+    if not abaqus_bat_p.exists():
+        raise FileNotFoundError(f"找不到 abaqus.bat：{abaqus_bat_p}")
+
+    export_p = Path(dequote(export_script)).resolve()
+    if not export_p.exists():
+        raise FileNotFoundError(f"找不到 export_script：{export_p}")
+
+    odb = f"{jobname}.odb"
+    cwd = workdir if workdir is not None else os.getcwd()
+
+    # 关键：shell=False + list 形式时，不要给任何参数加引号
+    # cmd.exe 只负责解释/执行 bat；参数原样传递即可（含空格也没问题）
+    cmd = [
+        "cmd.exe", "/c",
+        str(abaqus_bat_p),
+        "python",
+        str(export_p),
+        odb,
+        out_csv,
+    ]
+
+    if log_path:
+        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "w", encoding="utf-8", errors="replace") as f:
+            subprocess.run(
+                cmd,
+                check=True,
+                shell=False,
+                cwd=cwd,
+                stdout=f,
+                stderr=subprocess.STDOUT,
+            )
+    else:
+        subprocess.run(
+            cmd,
+            check=True,
+            shell=False,
+            cwd=cwd,
+        )
+        
 def cal_E(data_dict,workers,E0 = 680.0):
-    E = np.zeros((71, 2))      # 能量矩阵
     instances = ["P4_19-2", "P4_19-1"]
-    
-    for i, w in enumerate(workers):
-        dt = w["timePeriod"]
+    E = np.zeros((71, len(instances)), dtype=np.float64)
+
+    # 时间积分：workers 遍历时间片
+    for w in workers:
+        dt = float(w["timePeriod"])
+        step_name = w["step_name"]
 
         for j, ins in enumerate(instances):
-            T = data_dict[w["step_name"]][ins]["nt"]   # shape: (71, N, 3) or (71, N)
+            nt = data_dict[step_name][ins]["nt"]       # (71,N,3) or (71,N) or (71,)
+            s_vec = nt.mean(axis=1)     # (71,)
+            E[:, j] += s_vec * dt                      # 对时间累加（积分）
 
-            Ti = T[i]                  # 第 i 个时间
-            T_mean = Ti.mean()         # 空间 + 分量平均
-            E[i, j] = T_mean * dt
-
-    reward_matrix = np.minimum(E - E0, 0.0)
-    # reward = reward_matrix.mean(axis=1)
-    
-    return reward_matrix.mean()
+    # 阈值惩罚：低于 E0 才扣分
+    reward_matrix = np.minimum(E - E0, 0.0)            # (71,2)，元素<=0
+    reward = float(reward_matrix.mean())               # scalar，<=0
+    return reward
 
 def cal_U(data_dict):
     instances = ["P4_19-1", "P4_19-2"]
 
-    u_means = [data_dict["unflatten"][ins]["u"].mean() - 0.0002 for ins in instances]
+    u_scores = []
+    for ins in instances:
+        u = data_dict["unflatten"][ins]["u"]          # (71,49,3)
+        u_mag = np.linalg.norm(u, axis=-1)            # (71,49) 位移幅值
+        u_scores.append(u_mag.mean() - 2e-4)          # 原来的 -0.0002 偏置保留
 
-    s_target = 0.0  # 你的阈值
-    rewards = [-max(u_mean - s_target, 0) for u_mean in u_means]
-
-    # 合成一个 scalar reward
-    reward = min(rewards)  # 最严格约束
+    reward = -float(np.mean(u_scores))
     return reward
 
 def cal_S(data_dict):
     instances = ["P4_19-1", "P4_19-2"]
 
-    u_means = [abs(data_dict["unflatten"][ins]["s"]).mean() for ins in instances]
+    s_scores = []
+    for ins in instances:
+        s = data_dict["unflatten"][ins]["s"]        
+        s_mag = np.linalg.norm(s, axis=-1)           
+        s_scores.append(s_mag.mean())          
 
-    s_target = 0.0  # 你的阈值
-    rewards = [-max(u_mean - s_target, 0) for u_mean in u_means]
-
-    # 合成一个 scalar reward
-    reward = min(rewards)  # 最严格约束
+    reward = -float(np.mean(s_scores))
     return reward
 
 def run_pipeline(
@@ -77,8 +143,8 @@ def run_pipeline(
         (1,4,32),
         (2,120,32),
         (4,10,200)
-    ]
-    
+    ],
+    cmd_path = None
 ):
     """
     自动执行 Abaqus Job 流程，包括 INP/FOR 扰动、作业提交、导出结果等。
@@ -164,13 +230,23 @@ def run_pipeline(
     # Step 5: 导出结果
     print("▶ 正在导出 Abaqus 结果 ...")
     try:
-        subprocess.run(
+        if cmd_path:
+            run_abaqus_bat_python_export(
+                abaqus_bat=cmd_path,
+                export_script=export_script,
+                jobname=jobname,
+                out_csv="out.csv",
+                workdir=None,                 
+                log_path="export.log",         
+        )
+        else:
+            subprocess.run(
             [
                 abaqus_cmd, "python", export_script,
                 f"{jobname}.odb", "out.csv",
             ],
             check=True,
-            shell=True,
+            shell=False,
         )
         print("✔️ 结果导出成功")
     except subprocess.CalledProcessError as e:
